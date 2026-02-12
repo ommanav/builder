@@ -1,0 +1,406 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>AI Website Builder</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* CRITICAL: Mobile Viewport Fixes */
+        body {
+            min-height: 100dvh;
+            display: flex;
+            flex-direction: row; /* Sidebar + Main */
+            overflow: hidden;
+            background-color: #0f172a; /* Slate 900 */
+            color: #e2e8f0;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #475569; border-radius: 3px; }
+
+        /* Loader Animation */
+        .loader {
+            border: 2px solid #f3f3f3;
+            border-top: 2px solid #3b82f6;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Syntax Highlighting Mockup */
+        #code-editor {
+            font-family: 'Menlo', 'Monaco', 'Courier New', monospace;
+            white-space: pre;
+            tab-size: 2;
+        }
+
+        /* Mobile Sidebar Toggle Logic */
+        @media (max-width: 768px) {
+            #sidebar {
+                position: absolute;
+                z-index: 50;
+                height: 100dvh;
+                transform: translateX(-100%);
+                transition: transform 0.3s ease;
+            }
+            #sidebar.open { transform: translateX(0); }
+            /* Overlay when sidebar is open */
+            #sidebar-overlay {
+                display: none;
+                position: absolute;
+                inset: 0;
+                background: rgba(0,0,0,0.5);
+                z-index: 40;
+            }
+            #sidebar-overlay.open { display: block; }
+        }
+    </style>
+</head>
+<body>
+
+    <div id="sidebar-overlay" onclick="toggleSidebar()"></div>
+
+    <aside id="sidebar" class="w-64 bg-slate-900 border-r border-slate-700 flex flex-col flex-shrink-0">
+        <div class="p-4 border-b border-slate-700">
+            <button onclick="resetProject()" class="w-full bg-blue-600 hover:bg-blue-500 text-white font-medium py-2 px-4 rounded-md transition flex items-center justify-center gap-2">
+                <span>+</span> New Project
+            </button>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-2" id="project-list">
+            <div class="text-xs text-slate-500 uppercase tracking-wider mb-2 px-2 mt-2">History</div>
+            <div id="history-items"></div>
+        </div>
+
+        <div class="p-4 border-t border-slate-700">
+            <button onclick="openSettings()" class="flex items-center gap-2 text-slate-400 hover:text-white transition w-full">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                <span>Settings</span>
+            </button>
+        </div>
+    </aside>
+
+    <main class="flex-1 flex flex-col h-[100dvh] relative bg-slate-800">
+        
+        <div class="md:hidden h-12 bg-slate-900 flex items-center px-4 border-b border-slate-700 shrink-0">
+            <button onclick="toggleSidebar()" class="text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                </svg>
+            </button>
+            <span class="ml-4 font-bold text-sm">AI Builder</span>
+        </div>
+
+        <header class="h-14 bg-slate-900 border-b border-slate-700 flex items-center justify-between px-4 shrink-0">
+            <div class="flex gap-2 group">
+                <div class="w-3 h-3 rounded-full bg-red-500 group-hover:bg-red-600 transition"></div>
+                <div class="w-3 h-3 rounded-full bg-yellow-500 group-hover:bg-yellow-600 transition"></div>
+                <div class="w-3 h-3 rounded-full bg-green-500 group-hover:bg-green-600 transition"></div>
+            </div>
+
+            <div class="bg-slate-800 p-1 rounded-lg flex text-sm">
+                <button onclick="setView('preview')" id="btn-preview" class="px-3 py-1 rounded bg-slate-600 text-white shadow transition">Preview</button>
+                <button onclick="setView('code')" id="btn-code" class="px-3 py-1 rounded hover:bg-slate-700 text-slate-300 transition">Code</button>
+            </div>
+
+            <button onclick="downloadCode()" class="text-slate-400 hover:text-white transition" title="Download index.html">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+            </button>
+        </header>
+
+        <div class="flex-1 overflow-hidden relative bg-white">
+            <iframe id="preview-frame" class="w-full h-full border-0 block bg-white"></iframe>
+            
+            <textarea id="code-editor" class="w-full h-full bg-slate-900 text-green-400 p-4 border-0 resize-none outline-none hidden text-sm font-mono" spellcheck="false"></textarea>
+            
+            <div id="loader" class="absolute inset-0 bg-slate-900/80 flex items-center justify-center hidden z-20">
+                <div class="flex flex-col items-center gap-2">
+                    <div class="loader"></div>
+                    <span class="text-sm text-blue-400 animate-pulse">Generating UI...</span>
+                </div>
+            </div>
+        </div>
+
+        <footer class="bg-slate-900 border-t border-slate-700 p-4 shrink-0">
+            <div class="flex gap-2 max-w-4xl mx-auto">
+                <textarea id="prompt-input" rows="1" class="flex-1 bg-slate-800 text-white rounded-lg border border-slate-600 p-3 text-sm focus:border-blue-500 focus:outline-none resize-none" placeholder="Describe your website (e.g. 'A landing page for a coffee shop')..." onkeydown="checkEnter(event)"></textarea>
+                <button onclick="generateSite()" id="send-btn" class="bg-blue-600 hover:bg-blue-500 text-white rounded-lg px-4 flex items-center justify-center disabled:opacity-50 disabled:cursor-not-allowed">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                        <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-8.707l-3-3a1 1 0 00-1.414 0l-3 3a1 1 0 001.414 1.414L9 9.414V13a1 1 0 102 0V9.414l1.293 1.293a1 1 0 001.414-1.414z" clip-rule="evenodd" />
+                    </svg>
+                </button>
+            </div>
+        </footer>
+    </main>
+
+    <div id="settings-modal" class="fixed inset-0 bg-black/80 hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-slate-800 rounded-lg border border-slate-700 w-full max-w-md p-6 shadow-2xl">
+            <h2 class="text-xl font-bold mb-4 text-white">API Settings</h2>
+            
+            <label class="block text-xs text-slate-400 mb-1">API URL (Force OpenRouter)</label>
+            <input type="text" id="setting-url" class="w-full bg-slate-900 border border-slate-600 rounded p-2 mb-4 text-sm text-slate-300" value="https://openrouter.ai/api/v1/chat/completions">
+            
+            <label class="block text-xs text-slate-400 mb-1">API Key</label>
+            <input type="password" id="setting-key" class="w-full bg-slate-900 border border-slate-600 rounded p-2 mb-4 text-sm text-white" placeholder="sk-or-...">
+            
+            <label class="block text-xs text-slate-400 mb-1">Model ID</label>
+            <input type="text" id="setting-model" class="w-full bg-slate-900 border border-slate-600 rounded p-2 mb-6 text-sm text-slate-300" value="deepseek/deepseek-r1:free">
+            
+            <div class="flex justify-end gap-2">
+                <button onclick="closeSettings()" class="px-4 py-2 text-slate-300 hover:text-white">Cancel</button>
+                <button onclick="saveSettings()" class="px-4 py-2 bg-blue-600 rounded hover:bg-blue-500 text-white font-medium">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS & STATE ---
+        const SYSTEM_PROMPT = `You are a web developer. Output ONLY raw HTML code with Tailwind CSS. 
+        Do not output markdown. Do not explain. Do not start with \`\`\`html. 
+        Start immediately with <!DOCTYPE html>.
+        Include all styles in <style> or usage of Tailwind classes. 
+        Ensure the design is modern, responsive, and beautiful.`;
+
+        let currentCode = "";
+        const DEFAULT_URL = "https://openrouter.ai/api/v1/chat/completions";
+        const DEFAULT_MODEL = "deepseek/deepseek-r1:free";
+
+        // --- INIT ---
+        document.addEventListener('DOMContentLoaded', () => {
+            loadSettings();
+            loadHistory();
+            updatePreview(currentCode);
+        });
+
+        // --- SETTINGS LOGIC ---
+        function openSettings() {
+            document.getElementById('settings-modal').classList.remove('hidden');
+            document.getElementById('setting-key').value = localStorage.getItem('apiKey') || '';
+            document.getElementById('setting-url').value = localStorage.getItem('apiUrl') || DEFAULT_URL;
+            document.getElementById('setting-model').value = localStorage.getItem('apiModel') || DEFAULT_MODEL;
+        }
+
+        function closeSettings() {
+            document.getElementById('settings-modal').classList.add('hidden');
+        }
+
+        function saveSettings() {
+            const url = document.getElementById('setting-url').value.trim();
+            const key = document.getElementById('setting-key').value.trim();
+            const model = document.getElementById('setting-model').value.trim();
+
+            if (!key) { alert("Please enter an API Key."); return; }
+            
+            // Force strict check on URL per requirement
+            if (url !== DEFAULT_URL) {
+                if(!confirm("The recommended URL is OpenRouter. Are you sure you want to change it?")) return;
+            }
+
+            localStorage.setItem('apiUrl', url);
+            localStorage.setItem('apiKey', key);
+            localStorage.setItem('apiModel', model);
+            closeSettings();
+        }
+
+        function loadSettings() {
+            // Ensure defaults exist if not set
+            if(!localStorage.getItem('apiUrl')) localStorage.setItem('apiUrl', DEFAULT_URL);
+            if(!localStorage.getItem('apiModel')) localStorage.setItem('apiModel', DEFAULT_MODEL);
+        }
+
+        // --- UI LOGIC ---
+        function setView(view) {
+            const previewFrame = document.getElementById('preview-frame');
+            const codeEditor = document.getElementById('code-editor');
+            const btnPreview = document.getElementById('btn-preview');
+            const btnCode = document.getElementById('btn-code');
+
+            if (view === 'preview') {
+                previewFrame.classList.remove('hidden');
+                codeEditor.classList.add('hidden');
+                btnPreview.className = "px-3 py-1 rounded bg-slate-600 text-white shadow transition";
+                btnCode.className = "px-3 py-1 rounded hover:bg-slate-700 text-slate-300 transition";
+                updatePreview(currentCode); // Refresh frame
+            } else {
+                previewFrame.classList.add('hidden');
+                codeEditor.classList.remove('hidden');
+                btnPreview.className = "px-3 py-1 rounded hover:bg-slate-700 text-slate-300 transition";
+                btnCode.className = "px-3 py-1 rounded bg-slate-600 text-white shadow transition";
+                codeEditor.value = currentCode;
+            }
+        }
+
+        function updatePreview(html) {
+            const frame = document.getElementById('preview-frame');
+            const blob = new Blob([html], { type: 'text/html' });
+            frame.src = URL.createObjectURL(blob);
+        }
+
+        function toggleSidebar() {
+            const sb = document.getElementById('sidebar');
+            const ov = document.getElementById('sidebar-overlay');
+            sb.classList.toggle('open');
+            ov.classList.toggle('open');
+        }
+
+        function checkEnter(e) {
+            if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                generateSite();
+            }
+        }
+
+        function downloadCode() {
+            const blob = new Blob([currentCode], {type: "text/html"});
+            const link = document.createElement("a");
+            link.href = URL.createObjectURL(blob);
+            link.download = "index.html";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        function resetProject() {
+            if(confirm("Start new project? Current code will be lost.")) {
+                currentCode = "";
+                document.getElementById('code-editor').value = "";
+                updatePreview("<h1>New Project</h1>");
+            }
+        }
+
+        // --- CORE AI LOGIC ---
+        async function generateSite() {
+            const promptInput = document.getElementById('prompt-input');
+            const userPrompt = promptInput.value.trim();
+            const apiKey = localStorage.getItem('apiKey');
+            const apiUrl = localStorage.getItem('apiUrl') || DEFAULT_URL;
+            const model = localStorage.getItem('apiModel') || DEFAULT_MODEL;
+
+            if (!userPrompt) return;
+            if (!apiKey) {
+                openSettings();
+                alert("Please save your API Key first.");
+                return;
+            }
+
+            // UI State: Loading
+            document.getElementById('loader').classList.remove('hidden');
+            const sendBtn = document.getElementById('send-btn');
+            sendBtn.disabled = true;
+            promptInput.disabled = true;
+
+            try {
+                // Prepare messages. We include currentCode if it exists so the AI can iterate.
+                const messages = [
+                    { role: "system", content: SYSTEM_PROMPT },
+                    { role: "user", content: currentCode.length > 50 
+                        ? `Here is the current code: \n\n${currentCode}\n\n Update it based on this request: ${userPrompt}`
+                        : userPrompt 
+                    }
+                ];
+
+                // 1. Fetch
+                const response = await fetch(apiUrl, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${apiKey}`,
+                        "HTTP-Referer": window.location.href, // OpenRouter requirement
+                        "X-Title": "AI Website Builder"
+                    },
+                    body: JSON.stringify({
+                        model: model,
+                        messages: messages,
+                        temperature: 0.7
+                    })
+                });
+
+                // 2. Anti-Crash Logic (Text First)
+                const text = await response.text();
+
+                if (!response.ok) {
+                    throw new Error(`API Error ${response.status}: ${text}`);
+                }
+
+                // 3. Safe Parse
+                let data;
+                try {
+                    data = JSON.parse(text);
+                } catch (e) {
+                    throw new Error("Failed to parse JSON response: " + text.substring(0, 100) + "...");
+                }
+
+                let content = data.choices[0].message.content;
+
+                // 4. CLEANUP: Strip <think> tags (DeepSeek R1 specific)
+                content = content.replace(/<think>[\s\S]*?<\/think>/gi, "");
+
+                // 5. CLEANUP: Extract HTML from markdown code blocks if present
+                const htmlMatch = content.match(/```html([\s\S]*?)```/);
+                if (htmlMatch) {
+                    content = htmlMatch[1];
+                } else {
+                    // Fallback: try to find start/end tags if markdown missing
+                    const docStart = content.indexOf('<!DOCTYPE html>');
+                    const docEnd = content.lastIndexOf('</html>');
+                    if (docStart !== -1 && docEnd !== -1) {
+                        content = content.substring(docStart, docEnd + 7);
+                    }
+                }
+
+                currentCode = content.trim();
+
+                // Update UI
+                updatePreview(currentCode);
+                document.getElementById('code-editor').value = currentCode;
+                addToHistory(userPrompt);
+                
+                // Clear input
+                promptInput.value = "";
+
+            } catch (error) {
+                alert(error.message);
+                console.error(error);
+            } finally {
+                document.getElementById('loader').classList.add('hidden');
+                sendBtn.disabled = false;
+                promptInput.disabled = false;
+                promptInput.focus();
+            }
+        }
+
+        // --- HISTORY MANAGEMENT ---
+        function addToHistory(prompt) {
+            let history = JSON.parse(localStorage.getItem('projectHistory') || "[]");
+            history.unshift({ prompt: prompt, date: new Date().toLocaleTimeString() });
+            if (history.length > 20) history.pop();
+            localStorage.setItem('projectHistory', JSON.stringify(history));
+            renderHistory();
+        }
+
+        function loadHistory() {
+            renderHistory();
+        }
+
+        function renderHistory() {
+            const history = JSON.parse(localStorage.getItem('projectHistory') || "[]");
+            const container = document.getElementById('history-items');
+            container.innerHTML = history.map(item => `
+                <div class="p-2 mx-2 mb-1 hover:bg-slate-800 rounded cursor-pointer text-sm text-slate-300 truncate border-l-2 border-transparent hover:border-blue-500 transition" title="${item.prompt}">
+                    ${item.prompt}
+                </div>
+            `).join('');
+        }
+    </script>
+</body>
+</html>
